@@ -19,7 +19,7 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM public.products) = 2, 'Ana ve solo productos del Club A';
   ASSERT (SELECT count(*) FROM public.users) = 4, 'Ana ve los usuarios de su club';
   ASSERT (SELECT count(*) FROM public.platform_admins) = 1, 'Ana ve solo su propia ficha de administradora';
-  ASSERT (SELECT count(*) FROM public.payment_methods) = 4, 'El catalogo de metodos de pago es de lectura comun';
+  ASSERT (SELECT count(*) FROM public.payment_methods) = 5, 'El catalogo de metodos de pago es de lectura comun';
   ASSERT (SELECT count(*) FROM public.sync_errors) = 1, 'Ana ve solo los errores de su club';
   ASSERT public.can_manage_club('c0000000-0000-0000-0000-00000000000a'), 'Ana gestiona el Club A';
   ASSERT NOT public.can_manage_club('c0000000-0000-0000-0000-00000000000b'), 'Ana NO gestiona el Club B';

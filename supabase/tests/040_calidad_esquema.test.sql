@@ -69,7 +69,8 @@ BEGIN
       FROM pg_proc p
      WHERE p.pronamespace = 'private'::regnamespace
        AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
-       AND p.proname NOT IN ('current_admin_id', 'visible_club_ids', 'current_actor');
+       AND p.proname NOT IN ('current_admin_id', 'visible_club_ids', 'current_actor',
+                             'promotion_in_schedule');   -- pura: no lee tablas
     ASSERT v_missing IS NULL, 'Funciones privadas ejecutables por el panel: ' || v_missing;
 
     -- 8) anon no tiene NINGUN permiso sobre tablas ni vistas
@@ -109,10 +110,12 @@ BEGIN
     ASSERT NOT has_column_privilege('authenticated', 'public.users', 'locked_until', 'SELECT'),    'locked_until expuesto al panel';
 
     -- 12) El panel no puede BORRAR nada, salvo metodos de pago de un impuesto
+    --     asignaciones de personal (15), precios de barra (16) y productos
+    --     de un combo (17): quitar = borrar, queda auditado
     SELECT string_agg(c.relname, ', ') INTO v_missing
       FROM pg_class c
      WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
-       AND c.relname <> 'tax_payment_methods'
+       AND c.relname NOT IN ('tax_payment_methods', 'staff_assignments', 'product_location_prices', 'combo_items', 'promotion_locations')
        AND has_table_privilege('authenticated', c.oid, 'DELETE, TRUNCATE');
     ASSERT v_missing IS NULL, 'El panel puede borrar en: ' || v_missing;
 
@@ -126,7 +129,8 @@ BEGIN
     -- 14) Los libros de solo agregar tienen su candado
     SELECT string_agg(t.name, ', ') INTO v_missing
       FROM unnest(ARRAY['sale_items', 'sale_payments', 'sale_status_events', 'sale_item_substitutions',
-                        'sale_item_taxes', 'inventory_movements', 'audit_log']) AS t(name)
+                        'sale_item_taxes', 'inventory_movements', 'audit_log',
+                        'cash_register_floats', 'night_stock_snapshots']) AS t(name)
      WHERE NOT EXISTS (
            SELECT 1 FROM pg_trigger tg
             WHERE tg.tgrelid = ('public.' || t.name)::regclass
@@ -181,8 +185,20 @@ BEGIN
      WHERE pt.pubname = 'powersync'
        AND pt.tablename IN ('platform_admins', 'audit_log', 'inventory_movements', 'stock_alerts');
     ASSERT v_missing IS NULL, 'Tablas internas publicadas a PowerSync: ' || v_missing;
-    ASSERT (SELECT count(*) FROM pg_publication_tables WHERE pubname = 'powersync') = 17,
-           'La publicacion powersync debe tener 17 tablas (actualizar 09 y esta prueba juntos)';
+    ASSERT (SELECT count(*) FROM pg_publication_tables WHERE pubname = 'powersync') = 24,
+           'La publicacion powersync debe tener 24 tablas (actualizar 09, 12, 13, 15, 16, 17, 18 y esta prueba juntos)';
+
+    -- 19 bis) Realtime: el panel ve en vivo ventas, pagos, noches y cambio
+    SELECT string_agg(t.name, ', ') INTO v_missing
+      FROM unnest(ARRAY['sales', 'sale_payments', 'club_nights', 'cash_register_floats']) AS t(name)
+     WHERE NOT EXISTS (SELECT 1 FROM pg_publication_tables pt
+                        WHERE pt.pubname = 'supabase_realtime' AND pt.schemaname = 'public' AND pt.tablename = t.name);
+    ASSERT v_missing IS NULL, 'Tablas sin Realtime: ' || v_missing;
+    SELECT string_agg(pt.tablename, ', ') INTO v_missing
+      FROM pg_publication_tables pt
+     WHERE pt.pubname = 'supabase_realtime'
+       AND pt.tablename IN ('users', 'platform_admins', 'audit_log');
+    ASSERT v_missing IS NULL, 'Tablas con secretos o internas en Realtime: ' || v_missing;
 
     -- 20) Toda tabla y vista esta documentada (COMMENT ON)
     SELECT string_agg(c.relname, ', ') INTO v_missing

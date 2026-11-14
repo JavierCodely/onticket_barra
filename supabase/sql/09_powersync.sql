@@ -46,6 +46,20 @@ CREATE PUBLICATION powersync FOR TABLE
     public.sale_item_taxes,
     public.sync_errors;
 
+-- Tablas de archivos posteriores (por si este se ejecuta despues):
+-- club_nights (12) le dice al posnet si hay una noche abierta.
+DO $$
+BEGIN
+    IF to_regclass('public.club_nights') IS NOT NULL THEN
+        ALTER PUBLICATION powersync ADD TABLE public.club_nights;
+    END IF;
+    -- product_categories (13): el posnet agrupa los productos.
+    IF to_regclass('public.product_categories') IS NOT NULL THEN
+        ALTER PUBLICATION powersync ADD TABLE public.product_categories;
+    END IF;
+END;
+$$;
+
 COMMIT;
 
 -- ---------------------------------------------------------------------
@@ -65,5 +79,6 @@ COMMIT;
 --     public.taxes, public.tax_payment_methods, public.inventory_balances,
 --     public.sales, public.sale_items, public.sale_payments,
 --     public.sale_status_events, public.sale_item_substitutions,
---     public.sale_item_taxes, public.sync_errors
+--     public.sale_item_taxes, public.sync_errors, public.club_nights,
+--     public.product_categories
 -- TO powersync_role;

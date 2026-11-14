@@ -3,23 +3,23 @@
 BEGIN;
 \ir fixture.sql
 
--- Impuestos del Club A:  Comision tarjeta 3 % (tarjeta)
---                        Imp debitos y creditos 1,2 % (tarjeta y transferencia)
+-- Impuestos del Club A:  Comision PIX 3 % (PIX)
+--                        Imp debitos y creditos 1,2 % (PIX y transferencia)
 --                        Tasa fija $50 por unidad (todos los metodos)
 -- Club B: un impuesto propio, para probar el aislamiento.
 INSERT INTO public.taxes (id, club_id, name, kind, percentage, fixed_amount) VALUES
- ('90000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-00000000000a','Comision tarjeta','percentage',3,NULL),
+ ('90000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-00000000000a','Comision PIX','percentage',3,NULL),
  ('90000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-00000000000a','Imp debitos y creditos','percentage',1.2,NULL),
  ('90000000-0000-0000-0000-000000000003','c0000000-0000-0000-0000-00000000000a','Tasa fija','fixed',NULL,50),
  ('90000000-0000-0000-0000-00000000000b','c0000000-0000-0000-0000-00000000000b','Impuesto de B','percentage',5,NULL);
 INSERT INTO public.tax_payment_methods (club_id, tax_id, method) VALUES
- ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000001','card'),
- ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000002','card'),
+ ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000001','pix'),
+ ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000002','pix'),
  ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000002','transfer'),
- ('c0000000-0000-0000-0000-00000000000b','90000000-0000-0000-0000-00000000000b','card');
+ ('c0000000-0000-0000-0000-00000000000b','90000000-0000-0000-0000-00000000000b','pix');
 INSERT INTO public.tax_payment_methods (club_id, tax_id, method)
 SELECT 'c0000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-000000000003', pm.code
-  FROM public.payment_methods pm;
+  FROM public.payment_methods pm WHERE pm.active;
 
 -- ---- 1) Vista previa al cargar un producto (precio 5000, costo 1000) -
 SELECT public.t_login_as('aaaaaaaa-0000-0000-0000-0000000000a1');   -- Ana
@@ -30,33 +30,33 @@ BEGIN
   ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='cash')     = 3950, 'Efectivo: margen 3950';
   ASSERT (SELECT max(total_taxes)        FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='transfer') = 110,  'Transferencia: impuestos 110';
   ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='transfer') = 3890, 'Transferencia: margen 3890';
-  ASSERT (SELECT max(total_taxes)        FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card')     = 260,  'Tarjeta: impuestos 260';
-  ASSERT (SELECT max(net_after_taxes)    FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card')     = 4740, 'Tarjeta: neto 4740';
-  ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card')     = 3740, 'Tarjeta: margen 3740';
-  ASSERT (SELECT max(margin_pct)         FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card')     = 74.80, 'Tarjeta: margen 74,80 %';
-  ASSERT (SELECT count(*) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card') = 3, 'Tarjeta: 3 impuestos, cada uno con su nombre';
+  ASSERT (SELECT max(total_taxes)        FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix')     = 260,  'PIX: impuestos 260';
+  ASSERT (SELECT max(net_after_taxes)    FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix')     = 4740, 'PIX: neto 4740';
+  ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix')     = 3740, 'PIX: margen 3740';
+  ASSERT (SELECT max(margin_pct)         FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix')     = 74.80, 'PIX: margen 74,80 %';
+  ASSERT (SELECT count(*) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix') = 3, 'PIX: 3 impuestos, cada uno con su nombre';
   ASSERT (SELECT tax_name FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='cash') = 'Tasa fija', 'Debe mostrar el nombre del impuesto';
   ASSERT (SELECT payment_method_label FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='cash') = 'Efectivo', 'Debe traer la etiqueta del metodo';
-  ASSERT (SELECT tax_amount FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card' AND tax_name='Comision tarjeta') = 150, 'Comision tarjeta: 150';
-  -- los metodos salen en orden: efectivo, transferencia, tarjeta, otro
+  ASSERT (SELECT tax_amount FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix' AND tax_name='Comision PIX') = 150, 'Comision PIX: 150';
+  -- los metodos salen en orden: PIX, transferencia, efectivo (solo los activos)
   ASSERT (SELECT array_agg(y.method ORDER BY y.first_row)
             FROM (SELECT x.payment_method AS method, min(x.rn) AS first_row
                     FROM (SELECT p.payment_method, row_number() OVER () AS rn
                             FROM public.product_tax_preview(c,5000,1000) p) x
-                   GROUP BY x.payment_method) y) = ARRAY['cash','transfer','card','other'],
+                   GROUP BY x.payment_method) y) = ARRAY['pix','transfer','cash'],
          'Orden de los metodos de pago';
   -- sin precio todavia (campo vacio en el formulario): no devuelve filas ni falla
   ASSERT (SELECT count(*) FROM public.product_tax_preview(c,NULL,1000)) = 0, 'Precio vacio: sin filas';
   -- precio 0: no divide por cero
-  ASSERT (SELECT max(margin_pct) FROM public.product_tax_preview(c,0,0) WHERE payment_method='card') IS NULL, 'Precio 0: porcentaje vacio';
+  ASSERT (SELECT max(margin_pct) FROM public.product_tax_preview(c,0,0) WHERE payment_method='pix') IS NULL, 'Precio 0: porcentaje vacio';
 END $$;
 SELECT public.t_logout();
 
 -- Aislamiento: Luis (Club B) no ve ni calcula con los impuestos del Club A
 SELECT public.t_login_as('aaaaaaaa-0000-0000-0000-0000000000a2');
 DO $$ BEGIN
-  ASSERT (SELECT count(*) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000b',5000,1000) WHERE tax_id IS NULL) = 3,
-         'Club B: efectivo, transferencia y otro no tienen impuestos';
+  ASSERT (SELECT count(*) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000b',5000,1000) WHERE tax_id IS NULL) = 2,
+         'Club B: efectivo y transferencia no tienen impuestos';
   ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000b',5000,1000) WHERE payment_method='cash') = 4000,
          'Sin impuestos el margen es precio - costo';
   ASSERT (SELECT count(*) FROM public.taxes) = 1, 'Luis ve solo el impuesto de su club';
@@ -65,22 +65,43 @@ DO $$ BEGIN
 END $$;
 SELECT public.t_logout();
 
+-- ---- 1b) Metodos de pago: los mismos para todos los clubs -----------
+-- PIX, Transferencia y Efectivo. "Mixto" no es un metodo: es una venta
+-- con varias filas de sale_payments (ver seccion 2, venta S3).
+SELECT public.t_login_as('aaaaaaaa-0000-0000-0000-0000000000a1');   -- Ana
+DO $$ BEGIN
+  ASSERT (SELECT array_agg(code ORDER BY sort_order) FROM public.payment_methods WHERE active) = ARRAY['pix','transfer','cash'],
+         'Metodos activos: PIX, Transferencia, Efectivo';
+  ASSERT (SELECT array_agg(label ORDER BY sort_order) FROM public.payment_methods WHERE active) = ARRAY['PIX','Transferencia','Efectivo'],
+         'Etiquetas de los metodos';
+  ASSERT (SELECT count(*) FROM public.payment_methods WHERE code IN ('card','other') AND NOT active) = 2,
+         'Tarjeta y Otro quedan inactivos (no se borran: historia)';
+  ASSERT (SELECT count(*) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000a',5000,1000)
+           WHERE payment_method IN ('card','other')) = 0,
+         'La vista previa no muestra metodos inactivos';
+END $$;
+-- Un impuesto no puede sumar un metodo que ya no se usa
+SELECT public.t_expect_error($$INSERT INTO public.tax_payment_methods (club_id, tax_id, method) VALUES ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000001','card')$$, 'ya no se usa');
+-- El catalogo es global: el panel no lo modifica
+SELECT public.t_expect_error($$UPDATE public.payment_methods SET active = true WHERE code = 'card'$$, 'permission denied');
+SELECT public.t_logout();
+
 -- ---- 2) Ventas con impuestos (la foto la calcula el posnet) ----------
 SELECT public.t_as_service();
--- S1: viernes 23:30 - Corona x1 = 5000, todo con tarjeta
+-- S1: viernes 23:30 - Corona x1 = 5000, todo con PIX
 INSERT INTO public.sales (id, club_id, cash_register_id, cash_shift_id, cashier_user_id, ticket_number, total, created_at_device) VALUES
  ('61000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-00000000000a','20000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','C1-100',5000,'2026-11-06 23:30-03');
 INSERT INTO public.sale_items (id, club_id, sale_id, product_id, product_name, quantity, unit_price, unit_cost, line_total) VALUES
  ('71000000-0000-0000-0000-000000000001','c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','Corona',1,5000,1000,5000);
 INSERT INTO public.sale_payments (id, club_id, sale_id, method, amount) VALUES
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','card',5000);
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','pix',5000);
 INSERT INTO public.sale_item_taxes (id, club_id, sale_id, sale_item_id, tax_id, tax_name, kind, percentage, fixed_amount, applies_to_methods, taxable_ratio, amount) VALUES
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Comision tarjeta','percentage',3,NULL,'card',1,150),
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000002','Imp debitos y creditos','percentage',1.2,NULL,'card,transfer',1,60),
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'cash,transfer,card,other',1,50);
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Comision PIX','percentage',3,NULL,'pix',1,150),
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000002','Imp debitos y creditos','percentage',1.2,NULL,'pix,transfer',1,60),
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'pix,transfer,cash',1,50);
 
 -- S3: sabado 03:00 (misma noche) - Heineken x2 = 12000, pago MIXTO:
---     6000 efectivo + 6000 tarjeta. La tarjeta cubre la mitad (ratio 0,5):
+--     6000 efectivo + 6000 PIX. La PIX cubre la mitad (ratio 0,5):
 --     12000 x 3 % x 0,5 = 180 | 12000 x 1,2 % x 0,5 = 72 | fijo 50 x 2 = 100
 INSERT INTO public.sales (id, club_id, cash_register_id, cash_shift_id, cashier_user_id, ticket_number, total, created_at_device) VALUES
  ('61000000-0000-0000-0000-000000000003','c0000000-0000-0000-0000-00000000000a','20000000-0000-0000-0000-000000000002','50000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000002','C2-100',12000,'2026-11-07 03:00-03');
@@ -88,11 +109,11 @@ INSERT INTO public.sale_items (id, club_id, sale_id, product_id, product_name, q
  ('71000000-0000-0000-0000-000000000003','c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','40000000-0000-0000-0000-000000000002','Heineken',2,6000,2000,12000);
 INSERT INTO public.sale_payments (id, club_id, sale_id, method, amount) VALUES
  (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','cash',6000),
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','card',6000);
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','pix',6000);
 INSERT INTO public.sale_item_taxes (id, club_id, sale_id, sale_item_id, tax_id, tax_name, kind, percentage, fixed_amount, applies_to_methods, taxable_ratio, amount) VALUES
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000001','Comision tarjeta','percentage',3,NULL,'card',0.5,180),
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000002','Imp debitos y creditos','percentage',1.2,NULL,'card,transfer',0.5,72),
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'cash,transfer,card,other',1,100);
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000001','Comision PIX','percentage',3,NULL,'pix',0.5,180),
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000002','Imp debitos y creditos','percentage',1.2,NULL,'pix,transfer',0.5,72),
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000003','71000000-0000-0000-0000-000000000003','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'pix,transfer,cash',1,100);
 
 DO $$
 DECLARE c CONSTANT uuid := 'c0000000-0000-0000-0000-00000000000a';
@@ -125,9 +146,9 @@ DO $$
 DECLARE c CONSTANT uuid := 'c0000000-0000-0000-0000-00000000000a';
 BEGIN
   -- Las ventas NUEVAS ya no lo incluyen
-  ASSERT (SELECT max(total_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card') = 110, 'Tarjeta sin la comision: 110';
-  ASSERT (SELECT count(*) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card') = 2, 'Tarjeta: quedan 2 impuestos';
-  ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='card') = 3890, 'Tarjeta: margen 3890';
+  ASSERT (SELECT max(total_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix') = 110, 'PIX sin la comision: 110';
+  ASSERT (SELECT count(*) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix') = 2, 'PIX: quedan 2 impuestos';
+  ASSERT (SELECT max(margin_after_taxes) FROM public.product_tax_preview(c,5000,1000) WHERE payment_method='pix') = 3890, 'PIX: margen 3890';
   -- El impuesto sigue existiendo (no se borra), solo esta inactivo
   ASSERT (SELECT count(*) FROM public.taxes WHERE NOT active) = 1, 'El impuesto desactivado sigue en la lista';
   -- Queda registrado quien lo desactivo
@@ -137,7 +158,7 @@ BEGIN
 END $$;
 
 -- Renombrar, cambiar la tasa y reactivar
-UPDATE public.taxes SET name = 'Comision tarjeta VISA', percentage = 3.5 WHERE id = '90000000-0000-0000-0000-000000000001';
+UPDATE public.taxes SET name = 'Comision PIX VISA', percentage = 3.5 WHERE id = '90000000-0000-0000-0000-000000000001';
 UPDATE public.taxes SET active = true WHERE id = '90000000-0000-0000-0000-000000000001';
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM public.audit_log WHERE action='tax.updated'
@@ -150,15 +171,15 @@ UPDATE public.taxes SET active = false WHERE id = '90000000-0000-0000-0000-00000
 -- Alta de un impuesto nuevo con sus metodos; quitar un metodo
 INSERT INTO public.taxes (club_id, name, kind, fixed_amount) VALUES ('c0000000-0000-0000-0000-00000000000a','Impuesto nuevo','fixed',10);
 INSERT INTO public.tax_payment_methods (club_id, tax_id, method)
-SELECT t.club_id, t.id, 'other' FROM public.taxes t WHERE t.name = 'Impuesto nuevo';
+SELECT t.club_id, t.id, 'cash' FROM public.taxes t WHERE t.name = 'Impuesto nuevo';
 DELETE FROM public.tax_payment_methods
- WHERE tax_id = '90000000-0000-0000-0000-000000000003' AND method = 'other';
+ WHERE tax_id = '90000000-0000-0000-0000-000000000003' AND method = 'cash';
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM public.audit_log WHERE action='tax.created') = 1, 'Debia auditarse tax.created';
   ASSERT (SELECT count(*) FROM public.audit_log WHERE action='tax.method_added') = 1, 'Debia auditarse tax.method_added';
-  ASSERT (SELECT count(*) FROM public.audit_log WHERE action='tax.method_removed' AND details ->> 'method' = 'other') = 1, 'Debia auditarse tax.method_removed';
-  ASSERT (SELECT max(total_taxes) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000a',5000,1000) WHERE payment_method='other') = 10,
-         'Otro: ya no paga la tasa fija, solo el impuesto nuevo';
+  ASSERT (SELECT count(*) FROM public.audit_log WHERE action='tax.method_removed' AND details ->> 'method' = 'cash') = 1, 'Debia auditarse tax.method_removed';
+  ASSERT (SELECT max(total_taxes) FROM public.product_tax_preview('c0000000-0000-0000-0000-00000000000a',5000,1000) WHERE payment_method='cash') = 10,
+         'Efectivo: ya no paga la tasa fija, solo el impuesto nuevo';
 END $$;
 
 -- Lo que el panel NO puede hacer con impuestos
@@ -173,7 +194,7 @@ SELECT public.t_logout();
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM public.sale_item_taxes WHERE sale_item_id='71000000-0000-0000-0000-000000000001') = 3,
          'La venta anterior sigue mostrando sus 3 impuestos';
-  ASSERT (SELECT tax_name FROM public.sale_item_taxes WHERE tax_id='90000000-0000-0000-0000-000000000001' AND sale_id='61000000-0000-0000-0000-000000000001') = 'Comision tarjeta',
+  ASSERT (SELECT tax_name FROM public.sale_item_taxes WHERE tax_id='90000000-0000-0000-0000-000000000001' AND sale_id='61000000-0000-0000-0000-000000000001') = 'Comision PIX',
          'Conserva el nombre que tenia al vender';
   ASSERT (SELECT percentage FROM public.sale_item_taxes WHERE tax_id='90000000-0000-0000-0000-000000000001' AND sale_id='61000000-0000-0000-0000-000000000001') = 3,
          'Conserva la tasa que tenia al vender';
@@ -197,9 +218,9 @@ INSERT INTO public.sale_payments (id, club_id, sale_id, method, amount) VALUES
  (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000002','cash',5000);
 INSERT INTO public.sale_item_taxes (id, club_id, sale_id, sale_item_id, tax_id, tax_name, kind, percentage, fixed_amount, applies_to_methods, taxable_ratio, amount) VALUES
  -- monto mal calculado (debia ser 50)
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'cash,transfer,card',1,999),
- -- comision de tarjeta en una venta cobrada en efectivo
- (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000001','Comision tarjeta','percentage',3,NULL,'card',1,150);
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000003','Tasa fija','fixed',NULL,50,'pix,transfer,cash',1,999),
+ -- comision de PIX en una venta cobrada en efectivo
+ (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000002','71000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000001','Comision PIX','percentage',3,NULL,'pix',1,150);
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM public.v_sale_tax_issues WHERE ticket_number='C1-101') = 2, 'Debian detectarse los 2 impuestos mal calculados';
   ASSERT (SELECT count(*) FROM public.v_sale_tax_issues WHERE ticket_number IN ('C1-100','C2-100')) = 0, 'Las ventas correctas no se marcan';
@@ -214,14 +235,14 @@ SELECT public.t_expect_error($$INSERT INTO public.taxes (club_id,name,kind) VALU
 SELECT public.t_expect_error($$INSERT INTO public.taxes (club_id,name,kind) VALUES ('c0000000-0000-0000-0000-00000000000a','Porcentaje sin valor','percentage')$$, 'taxes_value_check');
 SELECT public.t_expect_error($$INSERT INTO public.taxes (club_id,name,kind,fixed_amount) VALUES ('c0000000-0000-0000-0000-00000000000a','   ','fixed',5)$$, 'taxes_name_not_blank');
 SELECT public.t_expect_error($$INSERT INTO public.taxes (club_id,name,kind,percentage) VALUES ('c0000000-0000-0000-0000-00000000000a','tasa FIJA','percentage',1)$$, 'uq_taxes_club_name');
-SELECT public.t_expect_error($$INSERT INTO public.tax_payment_methods (club_id,tax_id,method) VALUES ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000003','cash')$$, 'tax_payment_methods_unique');
+SELECT public.t_expect_error($$INSERT INTO public.tax_payment_methods (club_id,tax_id,method) VALUES ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000003','transfer')$$, 'tax_payment_methods_unique');
 SELECT public.t_expect_error($$INSERT INTO public.tax_payment_methods (club_id,tax_id,method) VALUES ('c0000000-0000-0000-0000-00000000000a','90000000-0000-0000-0000-000000000003','bitcoin')$$, 'foreign key');
 SELECT public.t_expect_error('UPDATE public.sale_item_taxes SET amount = 0', 'solo agregar');
 -- impuesto de OTRO club en una venta
 SELECT public.t_expect_error($$INSERT INTO public.sale_item_taxes (id, club_id, sale_id, sale_item_id, tax_id, tax_name, kind, percentage, applies_to_methods, taxable_ratio, amount)
-   VALUES (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-00000000000b','Ajeno','percentage',5,'card',1,1)$$, 'foreign key');
+   VALUES (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-00000000000b','Ajeno','percentage',5,'pix',1,1)$$, 'foreign key');
 -- el mismo impuesto dos veces sobre el mismo item
 SELECT public.t_expect_error($$INSERT INTO public.sale_item_taxes (id, club_id, sale_id, sale_item_id, tax_id, tax_name, kind, percentage, applies_to_methods, taxable_ratio, amount)
-   VALUES (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Comision tarjeta','percentage',3,'card',1,150)$$, 'sale_item_taxes_one_per_item');
+   VALUES (gen_random_uuid(),'c0000000-0000-0000-0000-00000000000a','61000000-0000-0000-0000-000000000001','71000000-0000-0000-0000-000000000001','90000000-0000-0000-0000-000000000001','Comision PIX','percentage',3,'pix',1,150)$$, 'sale_item_taxes_one_per_item');
 
 ROLLBACK;

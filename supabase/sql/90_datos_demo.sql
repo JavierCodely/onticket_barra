@@ -1,6 +1,6 @@
 -- =====================================================================
 -- ONTICKET - 90: DATOS DE DEMOSTRACION   (OPCIONAL - SOLO DESARROLLO)
--- Requiere: 01 a 09
+-- Requiere: 01 a 13
 --
 -- ANTES DE EJECUTAR
 --   1) Supabase > Authentication > Users > Add user (email + contrasena).
@@ -11,11 +11,11 @@
 -- CREA
 --   * tu administrador y el "Club Demo"
 --   * 1 barra, 2 cajas, 5 productos con stock inicial
---   * 3 impuestos:  Comision tarjeta 3 % (tarjeta)
---                   Imp. debitos y creditos 1,2 % (tarjeta y transferencia)
+--   * 3 impuestos:  Comision PIX 3 % (PIX)
+--                   Imp. debitos y creditos 1,2 % (PIX y transferencia)
 --                   Tasa fija $50 por unidad (todos los metodos)
 --     Con precio 5000 y costo 1000 el margen neto queda:
---       efectivo 3950 | transferencia 3890 | tarjeta 3740
+--       efectivo 3950 | transferencia 3890 | PIX 3740
 --   * 3 usuarios de posnet con PIN 123456 (SOLO PARA PRUEBAS):
 --       cajero1, cajero2 (cashier)  y  barra1 (bartender)
 --
@@ -92,7 +92,7 @@ BEGIN
 
     -- Impuestos y los metodos de pago que los disparan
     INSERT INTO public.taxes (club_id, name, kind, percentage)
-    VALUES (v_club, 'Comision tarjeta', 'percentage', 3)
+    VALUES (v_club, 'Comision PIX', 'percentage', 3)
     RETURNING id INTO v_tax_card;
     INSERT INTO public.taxes (club_id, name, kind, percentage)
     VALUES (v_club, 'Imp. debitos y creditos', 'percentage', 1.2)
@@ -102,11 +102,11 @@ BEGIN
     RETURNING id INTO v_tax_flat;
 
     INSERT INTO public.tax_payment_methods (club_id, tax_id, method) VALUES
-        (v_club, v_tax_card, 'card'),
-        (v_club, v_tax_bank, 'card'),
+        (v_club, v_tax_card, 'pix'),
+        (v_club, v_tax_bank, 'pix'),
         (v_club, v_tax_bank, 'transfer');
     INSERT INTO public.tax_payment_methods (club_id, tax_id, method)
-    SELECT v_club, v_tax_flat, pm.code FROM public.payment_methods pm;
+    SELECT v_club, v_tax_flat, pm.code FROM public.payment_methods pm WHERE pm.active;
 
     RAISE NOTICE 'Club Demo creado. Ya podes iniciar sesion en el panel con %', c_email;
 END;
