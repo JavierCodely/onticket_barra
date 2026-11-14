@@ -8,7 +8,7 @@
 -- * Sirve tambien para pasar de la version anterior del esquema
 --   (archivos 01 a 10, funciones en "public") a esta.
 -- * No toca los usuarios de Authentication ni el rol powersync_role.
--- * Despues: volver a ejecutar 01 a 09 (y 90 si queres datos demo).
+-- * Despues: volver a ejecutar 01 a 22 (y 90 si queres datos demo).
 --
 -- Al agregar una tabla, vista o funcion al esquema, sumarla aca.
 -- =====================================================================
@@ -16,7 +16,27 @@ BEGIN;
 
 DROP PUBLICATION IF EXISTS powersync;
 
+-- Fotos (14): se quitan las politicas de Storage (dependen de funciones de
+-- aca). El bucket y las fotos quedan: se borran desde Storage en el panel
+-- de Supabase si hace falta (Supabase no deja borrarlas con SQL).
+DROP POLICY IF EXISTS product_images_select ON storage.objects;
+DROP POLICY IF EXISTS product_images_insert ON storage.objects;
+DROP POLICY IF EXISTS product_images_update ON storage.objects;
+DROP POLICY IF EXISTS product_images_delete ON storage.objects;
+
+DROP FUNCTION IF EXISTS public.club_activity(uuid, date, date, integer);
+DROP FUNCTION IF EXISTS public.club_activity_by_day(uuid, date, date);
+DROP FUNCTION IF EXISTS public.club_admin_names(uuid);
+
 DROP VIEW IF EXISTS
+    public.v_club_activity,
+    public.v_sale_promotion_issues,
+    public.v_promotions_status,
+    public.v_register_product_prices,
+    public.v_sales_outside_night,
+    public.v_night_stock_summary,
+    public.v_night_register_summary,
+    public.v_sales_list,
     public.v_sale_tax_issues,
     public.v_ticket_number_conflicts,
     public.v_sales_integrity_issues,
@@ -26,6 +46,14 @@ DROP VIEW IF EXISTS
     public.v_sale_item_financials;
 
 DROP TABLE IF EXISTS
+    public.club_settings,
+    public.promotion_locations,
+    public.sale_item_components,
+    public.combo_items,
+    public.product_location_prices,
+    public.staff_assignments,
+    public.cash_register_floats,
+    public.night_stock_snapshots,
     public.sync_errors,
     public.audit_log,
     public.stock_alerts,
@@ -36,13 +64,16 @@ DROP TABLE IF EXISTS
     public.sale_status_events,
     public.sale_payments,
     public.sale_items,
+    public.promotions,
     public.sales,
+    public.club_nights,
     public.tax_payment_methods,
     public.taxes,
     public.cash_shifts,
     public.cash_registers,
     public.inventory_locations,
     public.products,
+    public.product_categories,
     public.users,
     public.clubs,
     public.platform_admins,
@@ -50,10 +81,38 @@ DROP TABLE IF EXISTS
 CASCADE;
 
 -- Funciones publicas
+DROP FUNCTION IF EXISTS public.club_staff_status(uuid);
 DROP FUNCTION IF EXISTS public.product_tax_preview(uuid, numeric, numeric);
 DROP FUNCTION IF EXISTS public.can_manage_club(uuid);
 
 -- Funciones internas
+DROP FUNCTION IF EXISTS private.club_settings_audit();
+DROP FUNCTION IF EXISTS private.club_default_settings();
+DROP FUNCTION IF EXISTS private.platform_admin_audit();
+DROP FUNCTION IF EXISTS private.platform_admin_names();
+DROP FUNCTION IF EXISTS private.promotion_location_audit();
+DROP FUNCTION IF EXISTS private.promotion_location_check();
+DROP FUNCTION IF EXISTS private.promotion_in_schedule(date, date, smallint, time, time, timestamp, integer);
+DROP FUNCTION IF EXISTS private.promotion_check();
+DROP FUNCTION IF EXISTS private.movement_not_on_combo();
+DROP FUNCTION IF EXISTS private.combo_item_audit();
+DROP FUNCTION IF EXISTS private.product_cost_to_combos();
+DROP FUNCTION IF EXISTS private.combo_items_after_change();
+DROP FUNCTION IF EXISTS private.combo_price_guard();
+DROP FUNCTION IF EXISTS private.combo_item_check();
+DROP FUNCTION IF EXISTS private.product_kind_fixed();
+DROP FUNCTION IF EXISTS private.product_location_price_audit();
+DROP FUNCTION IF EXISTS private.product_location_price_check();
+DROP FUNCTION IF EXISTS private.users_role_change_assignment();
+DROP FUNCTION IF EXISTS private.staff_assignment_audit();
+DROP FUNCTION IF EXISTS private.staff_assignment_user_fixed();
+DROP FUNCTION IF EXISTS private.staff_assignment_check();
+DROP FUNCTION IF EXISTS private.club_default_categories();
+DROP FUNCTION IF EXISTS private.cash_float_before_insert();
+DROP FUNCTION IF EXISTS private.night_after_change();
+DROP FUNCTION IF EXISTS private.night_before_update();
+DROP FUNCTION IF EXISTS private.night_before_insert();
+DROP FUNCTION IF EXISTS private.check_tax_method_active();
 DROP FUNCTION IF EXISTS private.audit_tax_method_change();
 DROP FUNCTION IF EXISTS private.audit_catalog_change();
 DROP FUNCTION IF EXISTS private.guard_sale_changes();

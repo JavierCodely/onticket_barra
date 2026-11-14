@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Onticket - Administración</title>
+    <script>
+      // Aplica el tema antes de pintar la pagina, para no mostrar un destello
+      // claro cuando el usuario eligio oscuro. La clave debe coincidir con
+      // CLAVE_TEMA en src/features/theme/theme-config.ts.
+      (function () {
+        try {
+          var guardado = localStorage.getItem("onticket-theme");
+          var oscuro =
+            guardado === "dark" ||
+            (guardado !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", oscuro);
+          document.documentElement.style.colorScheme = oscuro ? "dark" : "light";
+        } catch (e) {
+          // Sin acceso a localStorage o matchMedia: queda el tema claro.
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
